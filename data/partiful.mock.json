@@ -1,0 +1,26 @@
+{
+  "events": [
+    {
+      "name": "SoMa Tech Social",
+      "start": "2025-10-07T19:00:00-07:00",
+      "category": "Networking",
+      "location": "SoMa, San Francisco",
+      "status": "accepted",
+      "lat": 37.781, "lng": -122.402
+    },
+    {
+      "name": "AI & Pizza Night",
+      "start": "2025-10-07T20:30:00-07:00",
+      "category": "AI / Community",
+      "city": "Mission District, San Francisco",
+      "status": "pending"
+    },
+    {
+      "name": "Startups After Hours",
+      "start": "2025-10-08T18:30:00-07:00",
+      "category": "Startups",
+      "location": "Downtown SF",
+      "status": "accepted"
+    }
+  ]
+}

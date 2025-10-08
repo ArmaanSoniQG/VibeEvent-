@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>VibeEvent — Minimal Prototype</title>
+  <style>
+    :root {
+      --bg: #0b0f14;
+      --card: #121821;
+      --text: #e6eef8;
+      --muted: #9ab0c9;
+      --accent: #7cc0ff;
+      --accepted: #23d18b;
+      --pending: #ffb454;
+      --chip: #1b2430;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; background: var(--bg); color: var(--text); }
+    header { padding: 16px 20px; border-bottom: 1px solid #1e2733; display: flex; align-items: center; gap: 12px; }
+    header h1 { font-size: 18px; margin: 0; }
+    header small { color: var(--muted); }
+    main { max-width: 920px; margin: 0 auto; padding: 20px; }
+    .controls { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+    button { background: #1c2633; color: var(--text); border: 1px solid #2a3748; padding: 8px 12px; border-radius: 8px; cursor: pointer; }
+    button:hover { background: #223043; }
+    .row { display: grid; grid-template-columns: 1fr; gap: 12px; }
+    @media (min-width: 720px) { .row { grid-template-columns: 1fr 1fr; } }
+    .card { background: var(--card); border: 1px solid #1e2733; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+    .title { font-weight: 600; font-size: 16px; }
+    .muted { color: var(--muted); font-size: 13px; }
+    .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+    .chip { background: var(--chip); border: 1px solid #2a3748; padding: 3px 8px; border-radius: 999px; font-size: 12px; color: var(--muted); }
+    .badge { padding: 3px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+    .badge.accepted { background: rgba(35, 209, 139, 0.15); color: var(--accepted); border: 1px solid rgba(35, 209, 139, 0.35); }
+    .badge.pending { background: rgba(255, 180, 84, 0.15); color: var(--pending); border: 1px solid rgba(255, 180, 84, 0.35); }
+    .row-actions { display: flex; gap: 8px; align-items: center; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .error { color: #ff6b6b; }
+    .empty { color: var(--muted); text-align: center; padding: 32px 0; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>VibeEvent</h1>
+    <small>Live events with distance</small>
+    <div style="margin-left:auto" class="muted" id="locStatus">Detecting location…</div>
+  </header>
+  <main>
+    <div class="controls">
+      <button id="refreshBtn">Refresh</button>
+      <button id="useMockBtn">Use mock only</button>
+      <div class="muted" id="count"></div>
+    </div>
+    <div id="list" class="row"></div>
+    <div id="empty" class="empty" style="display:none">No events</div>
+    <div id="error" class="error"></div>
+  </main>
+
+  <script>
+    const state = { lat: null, lng: null, mockOnly: false };
+
+    function fmtDate(iso) {
+      if (!iso) return '';
+      try { return new Date(iso).toLocaleString(); } catch { return iso; }
+    }
+
+    function mapsUrl(ev) {
+      if (Number.isFinite(ev.lat) && Number.isFinite(ev.lng)) {
+        return `https://www.google.com/maps/search/?api=1&query=${ev.lat},${ev.lng}`;
+      }
+      return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(ev.location || ev.name)}`;
+    }
+
+    async function fetchEvents() {
+      const params = new URLSearchParams();
+      if (Number.isFinite(state.lat) && Number.isFinite(state.lng)) {
+        params.set('lat', state.lat);
+        params.set('lng', state.lng);
+      }
+      if (state.mockOnly) params.set('mock', '1'); // not used server-side but useful for testing toggle
+
+      const res = await fetch(`/api/events?${params.toString()}`);
+      if (!res.ok) throw new Error('Failed to fetch events');
+      return res.json();
+    }
+
+    function renderList(events) {
+      const list = document.getElementById('list');
+      const empty = document.getElementById('empty');
+      const count = document.getElementById('count');
+      list.innerHTML = '';
+
+      if (!events || events.length === 0) {
+        empty.style.display = 'block';
+        count.textContent = '';
+        return;
+      }
+      empty.style.display = 'none';
+      count.textContent = `${events.length} event${events.length>1?'s':''}`;
+
+      // sort by distance if available, then date
+      events.sort((a,b) => {
+        const ad = a.distance_km ?? Infinity; const bd = b.distance_km ?? Infinity;
+        if (ad !== bd) return ad - bd;
+        const at = a.start ? Date.parse(a.start) : 0; const bt = b.start ? Date.parse(b.start) : 0;
+        return at - bt;
+      });
+
+      for (const ev of events) {
+        const card = document.createElement('div');
+        card.className = 'card';
+
+        const top = document.createElement('div');
+        top.style.display = 'flex';
+        top.style.justifyContent = 'space-between';
+        top.style.alignItems = 'center';
+        const title = document.createElement('div');
+        title.className = 'title';
+        title.textContent = ev.name || 'Event';
+        const badge = document.createElement('span');
+        const status = (ev.status || 'pending').toLowerCase();
+        badge.className = `badge ${status.includes('accept')?'accepted':'pending'}`;
+        badge.textContent = status.includes('accept') ? 'accepted' : 'pending';
+        top.appendChild(title);
+        top.appendChild(badge);
+
+        const meta = document.createElement('div');
+        meta.className = 'muted';
+        const parts = [];
+        if (ev.start) parts.push(fmtDate(ev.start));
+        if (ev.category) parts.push(ev.category);
+        if (ev.location) parts.push(ev.location);
+        meta.textContent = parts.join(' • ');
+
+        const chips = document.createElement('div');
+        chips.className = 'chips';
+        if (Number.isFinite(ev.distance_km)) {
+          const km = document.createElement('span');
+          km.className = 'chip';
+          km.textContent = `${ev.distance_km} km away`;
+          chips.appendChild(km);
+
+          const mins = document.createElement('span');
+          mins.className = 'chip';
+          mins.textContent = `${Math.round((ev.distance_km / (5/60)))} min walk`;
+          chips.appendChild(mins);
+        }
+
+        const actions = document.createElement('div');
+        actions.className = 'row-actions';
+        const maps = document.createElement('a');
+        maps.href = mapsUrl(ev);
+        maps.target = '_blank';
+        maps.rel = 'noopener noreferrer';
+        maps.textContent = 'Open in Maps';
+        actions.appendChild(maps);
+
+        card.appendChild(top);
+        card.appendChild(meta);
+        card.appendChild(chips);
+        card.appendChild(actions);
+        list.appendChild(card);
+      }
+    }
+
+    async function load() {
+      const error = document.getElementById('error');
+      error.textContent = '';
+      try {
+        const data = await fetchEvents();
+        renderList(data.events || []);
+      } catch (e) {
+        error.textContent = e.message || String(e);
+      }
+    }
+
+    function initGeo() {
+      const locStatus = document.getElementById('locStatus');
+      if (!('geolocation' in navigator)) {
+        locStatus.textContent = 'Geolocation unavailable';
+        load();
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          state.lat = pos.coords.latitude;
+          state.lng = pos.coords.longitude;
+          locStatus.textContent = `Your location: ${state.lat.toFixed(3)}, ${state.lng.toFixed(3)}`;
+          load();
+        },
+        (err) => {
+          locStatus.textContent = 'Location denied';
+          load();
+        },
+        { enableHighAccuracy: false, timeout: 5000, maximumAge: 60000 }
+      );
+    }
+
+    document.getElementById('refreshBtn').addEventListener('click', load);
+    document.getElementById('useMockBtn').addEventListener('click', () => {
+      state.mockOnly = !state.mockOnly;
+      document.getElementById('useMockBtn').textContent = state.mockOnly ? 'Use live + mock' : 'Use mock only';
+      load();
+    });
+
+    initGeo();
+  </script>
+</body>
+</html>

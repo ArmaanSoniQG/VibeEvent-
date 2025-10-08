@@ -16,6 +16,17 @@ debug_screenshot.png
 # Output files
 *.csv
 
+# Node
+node_modules/
+dist/
+build/
+
+# Environment
+.env
+
+# Logs
+*.log
+
 # IDE
 .vscode/
 .idea/
